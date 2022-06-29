@@ -13,7 +13,7 @@ func Connect(uri string) (*mongo.Client, error) {
 	serverAPIOtions := options.ServerAPI(options.ServerAPIVersion1)
 	clientOptions := options.Client().ApplyURI(uri).SetServerAPIOptions(serverAPIOtions)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10 * time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30 * time.Second)
 	defer cancel()
 
 	client, err := mongo.Connect(ctx, clientOptions)
