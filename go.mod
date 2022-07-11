@@ -10,6 +10,7 @@ require (
 	github.com/joho/godotenv v1.4.0
 	github.com/rs/cors v1.8.2
 	go.mongodb.org/mongo-driver v1.9.1
+	golang.org/x/time v0.0.0-20220609170525-579cf78fd858
 )
 
 require (

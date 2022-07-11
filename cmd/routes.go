@@ -20,6 +20,7 @@ func(app *Application) routes() http.Handler {
 
 	mux.Use(
 		middleware.Recoverer,
+		middleware.Limit,
 	)
 
 	app.createLinkRoutes(mux)
