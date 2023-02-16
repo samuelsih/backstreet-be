@@ -1,37 +1,73 @@
 package repo
 
 import (
+	"backstreetlinkv2/cmd/helper"
 	"backstreetlinkv2/cmd/model"
 	"context"
-
-	_ "github.com/joho/godotenv"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
+	"database/sql"
+	"errors"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
+var (
+	UniqueErr         = errors.New("link already taken")
+	NotFoundErr       = errors.New("not found")
+	NoRowsAffectedErr = errors.New("no rows affected")
+)
 
-func InsertLink[T model.ShortenRequest | model.ShortenFileRequest](ctx context.Context, client *mongo.Client, data T) error {
-	db := client.Database("backstreet")
-	collection := db.Collection("shorten_link")
+const (
+	UniqueConstraint   = "23505"
+	CantProcessRequest = "can't process your request"
+)
 
-	_, err := collection.InsertOne(ctx, data)
-	return err
+type PGRepo struct {
+	db *pgx.Conn
 }
 
-func Find(ctx context.Context, client *mongo.Client, param string) (model.ShortenResponse, error) {
-	var shorten model.ShortenResponse
+func (p *PGRepo) Insert(ctx context.Context, key string, dataSource any) error {
+	const op = helper.Op("repo.PGRepo.Insert")
+	const query = `INSERT INTO sources (key_source, attrs) VALUES ($1, $2)`
 
-	db := client.Database("backstreet")
-	collection := db.Collection("shorten_link")
+	cmd, err := p.db.Exec(ctx, query, key, dataSource)
+	if err != nil {
+		var pgErr *pgconn.PgError
 
-	res := collection.FindOne(ctx, bson.M{"_id": param})
-	if res == nil {
-		return shorten, mongo.ErrNoDocuments
+		if errors.As(err, &pgErr) {
+			if pgErr.Code == UniqueConstraint {
+				return helper.E(op, helper.KindBadRequest, UniqueErr, UniqueErr.Error())
+			}
+		}
+
+		return helper.E(op, helper.KindUnexpected, err, CantProcessRequest)
 	}
 
-	if err := res.Decode(&shorten); err != nil {
-		return shorten, err
+	if cmd.RowsAffected() == 0 {
+		return helper.E(op, helper.KindUnexpected, NoRowsAffectedErr, CantProcessRequest)
 	}
 
-	return shorten, nil
+	return nil
+}
+
+func (p *PGRepo) Get(ctx context.Context, key string) (model.ShortenResponse, error) {
+	const op = helper.Op("repo.PGRepo.Get")
+	const query = ` SELECT attrs FROM sources WHERE key_source = $1`
+
+	var resp model.ShortenResponse
+
+	err := p.db.QueryRow(ctx, query, key).Scan(&resp)
+
+	if err != nil {
+		if err == pgx.ErrNoRows || err == sql.ErrNoRows {
+			return resp, helper.E(op, helper.KindNotFound, NotFoundErr, NotFoundErr.Error())
+		}
+
+		return resp, helper.E(op, helper.KindUnexpected, err, CantProcessRequest)
+	}
+
+	return resp, nil
+}
+
+func NewPGRepo(db *pgx.Conn) *PGRepo {
+	return &PGRepo{db: db}
 }

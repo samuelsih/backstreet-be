@@ -1,5 +1,8 @@
 run:
-	go run .\cmd\main.go .\cmd\routes.go .\cmd\handler.go .\cmd\multipart.go
+	go run .\cmd\main.go .\cmd\handler.go
+
+run-fresh:
+	go run .\cmd\main.go .\cmd\handler.go -fresh
 
 build:
 	go build .\cmd\.

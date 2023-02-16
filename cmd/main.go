@@ -1,60 +1,97 @@
 package main
 
 import (
+	"backstreetlinkv2/cmd/middleware"
+	"backstreetlinkv2/cmd/repo"
+	"backstreetlinkv2/cmd/service"
 	"backstreetlinkv2/db"
+	"backstreetlinkv2/db/migrations"
 	"context"
 	"errors"
+	"flag"
+	"github.com/gorilla/mux"
+	"github.com/rs/zerolog"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
-
-	_ "github.com/joho/godotenv/autoload"
-	"go.mongodb.org/mongo-driver/mongo"
 )
 
-// Application struct untuk menghandle core server
-type Application struct {
-	Server               *http.Server
-	Connection           *mongo.Client
-	InfoLog              *log.Logger
-	ErrorLog             *log.Logger
-	IdleConnectionClosed chan struct{}
-}
+const shutdownTimeout = 30 * time.Second
 
 func main() {
-	client, err := db.Connect(os.Getenv("MONGODB_URI"))
+	wantFreshDB := flag.Bool("fresh", false, "drop the DB and remigrate it")
+	flag.Parse()
+
+	log.SetOutput(zerolog.New(os.Stdout))
+
+	environment := os.Getenv("ENV")
+	if environment == "" {
+		environment = "LOCAL"
+	}
+
+	dsn := os.Getenv("COCKROACH_DSN")
+	if dsn == "" {
+		log.Fatal("no dsn")
+	}
+
+	dbClient, err := db.ConnectPG(dsn)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("can't connect to db: %v", err)
 	}
 
-	app := Application{
-		Connection:           client,
-		InfoLog:              log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime),
-		ErrorLog:             log.New(os.Stdout, "ERROR\t", log.Ldate|log.Ltime|log.Lshortfile),
-		IdleConnectionClosed: make(chan struct{}),
+	if *wantFreshDB {
+		ctx := context.Background()
+
+		_, err := dbClient.Exec(ctx, migrations.DownCmd)
+		if err != nil {
+			log.Fatalf("cant drop table: %v", err)
+		}
+
+		_, err = dbClient.Exec(ctx, migrations.UpCmd)
+		if err != nil {
+			log.Fatalf("cant create table: %v", err)
+		}
 	}
 
-	go app.shutdown()
-
-	app.serve()
-
-	<-app.IdleConnectionClosed
-	app.InfoLog.Println("App stopped successfully!!")
-}
-
-// serve menangani bagian saat mau start server
-func (app *Application) serve() {
-	port := os.Getenv("PORT")
+	port := os.Getenv("port")
 	if port == "" {
-		port = "8080"
+		port = ":8080"
 	}
 
-	app.Server = &http.Server{
-		Addr:              ":"+port,
-		Handler:           app.routes(),
+	router := mux.NewRouter()
+	router.Use(
+		middleware.CORS(environment),
+		middleware.Recoverer,
+		middleware.Limit,
+	)
+
+	pgRepo := repo.NewPGRepo(dbClient)
+	s3Service, err := repo.NewObjectScanner(repo.ObjectConfig{
+		AccessKey:        "",
+		SecretKey:        "",
+		Endpoint:         "",
+		Region:           "",
+		ForceS3PathStyle: false,
+		Bucket:           "",
+	})
+
+	if err != nil {
+		log.Fatalf("error s3: %v", err)
+	}
+
+	programService := service.NewLinkDeps(pgRepo, s3Service)
+
+	r := router.PathPrefix("/api/v2").Subrouter()
+	r.HandleFunc("/link", createLink(programService)).Methods(http.MethodPost)
+	r.HandleFunc("/file", createFile(programService)).Methods(http.MethodPost)
+	r.HandleFunc("/download-file/{alias}", downloadFile(programService)).Methods(http.MethodGet)
+	r.HandleFunc("/find/{alias}", find(programService)).Methods(http.MethodGet)
+
+	server := &http.Server{
+		Addr:              ":" + port,
 		ReadTimeout:       5 * time.Second,
 		WriteTimeout:      5 * time.Second,
 		IdleTimeout:       30 * time.Second,
@@ -62,51 +99,26 @@ func (app *Application) serve() {
 		MaxHeaderBytes:    10 * 1024 * 1024,
 	}
 
-	app.InfoLog.Println("Server start...")
-
-	if err := app.Server.ListenAndServe(); err != nil {
-		if !errors.Is(err, http.ErrServerClosed) {
-			app.ErrorLog.Fatal("Server failed to start:", err)
+	go func() {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("cant start server: %v", err)
 		}
-	}
-}
+	}()
 
-// shutdown menangani bagian saat mau nutup server
-func (app *Application) shutdown() {
-	sigint := make(chan os.Signal, 1)
-	signal.Notify(sigint, syscall.SIGTERM, syscall.SIGINT, os.Interrupt)
+	quit := make(chan os.Signal)
+	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT, os.Interrupt)
 
-	<-sigint
+	<-quit
 
-	app.InfoLog.Println("Shutdown order received!")
-
-	//closed db connection
-	closedDBChan := make(chan bool, 1)
-	go app.closeDB(closedDBChan)
-
-	//shutdown server
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// for this case, imho errgroup / goroutine is overkill
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
-	if err := app.Server.Shutdown(ctx); err != nil {
-		app.ErrorLog.Printf("Server shutdown error: %v", err)
+	if err := dbClient.Close(ctx); err != nil {
+		log.Printf("shutting down db error: %v", err)
 	}
 
-	<-closedDBChan
-
-	app.InfoLog.Println("Shutdown complete")
-
-	close(app.IdleConnectionClosed)
-	close(closedDBChan)
-}
-
-// closeDB menutup koneksi ke database
-func (app *Application) closeDB(done chan bool) {
-	app.InfoLog.Println("Closing database connection")
-
-	if err := app.Connection.Disconnect(context.TODO()); err != nil {
-		app.ErrorLog.Fatal(err)
+	if err := server.Shutdown(ctx); err != nil {
+		log.Printf("shutting down server error: %v", err)
 	}
-
-	done <- true
 }
