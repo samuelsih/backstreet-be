@@ -3,35 +3,54 @@ package repo
 import (
 	"backstreetlinkv2/cmd/model"
 	"context"
-
-	_ "github.com/joho/godotenv"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
+	"database/sql"
+	"errors"
+	"github.com/jackc/pgx/v5"
 )
 
+var (
+	UniqueErr   = errors.New("link already taken")
+	NotFoundErr = errors.New("not found")
+	InternalErr = errors.New("internal error")
+)
 
-func InsertLink[T model.ShortenRequest | model.ShortenFileRequest](ctx context.Context, client *mongo.Client, data T) error {
-	db := client.Database("backstreet")
-	collection := db.Collection("shorten_link")
-
-	_, err := collection.InsertOne(ctx, data)
-	return err
+type PGRepo struct {
+	db *pgx.Conn
 }
 
-func Find(ctx context.Context, client *mongo.Client, param string) (model.ShortenResponse, error) {
-	var shorten model.ShortenResponse
+func (p *PGRepo) Insert(ctx context.Context, key string, dataSource any) error {
+	const query = `INSERT INTO source (key_source, attrs) VALUES ($1, $2)`
 
-	db := client.Database("backstreet")
-	collection := db.Collection("shorten_link")
-
-	res := collection.FindOne(ctx, bson.M{"_id": param})
-	if res == nil {
-		return shorten, mongo.ErrNoDocuments
+	cmd, err := p.db.Exec(ctx, query, key, dataSource)
+	if err != nil {
+		return err
 	}
 
-	if err := res.Decode(&shorten); err != nil {
-		return shorten, err
+	if cmd.RowsAffected() == 0 {
+		return InternalErr
 	}
 
-	return shorten, nil
+	return nil
+}
+
+func (p *PGRepo) Get(ctx context.Context, key string) (model.ShortenResponse, error) {
+	const query = ` SELECT attrs FROM source WHERE key_source = $1`
+
+	var resp model.ShortenResponse
+
+	err := p.db.QueryRow(ctx, query, key).Scan(&resp)
+
+	if err != nil {
+		if err == pgx.ErrNoRows || err == sql.ErrNoRows {
+			return resp, NotFoundErr
+		}
+
+		return resp, InternalErr
+	}
+
+	return resp, nil
+}
+
+func NewPGRepo(db *pgx.Conn) *PGRepo {
+	return &PGRepo{db: db}
 }

@@ -2,6 +2,8 @@ package main
 
 import (
 	"backstreetlinkv2/cmd/middleware"
+	"backstreetlinkv2/cmd/repo"
+	"backstreetlinkv2/cmd/service"
 	"backstreetlinkv2/db"
 	"context"
 	"errors"
@@ -44,11 +46,27 @@ func main() {
 		middleware.Limit,
 	)
 
+	pgRepo := repo.NewPGRepo(dbClient)
+	s3Service, err := repo.NewObjectScanner(repo.ObjectConfig{
+		AccessKey:        "",
+		SecretKey:        "",
+		Endpoint:         "",
+		Region:           "",
+		ForceS3PathStyle: false,
+		Bucket:           "",
+	})
+
+	if err != nil {
+		log.Fatalf("error s3: %v", err)
+	}
+
+	withDeps := service.NewLinkDeps(pgRepo, s3Service)
+
 	r := mux.PathPrefix("/api/v2").Subrouter()
-	r.HandleFunc("/link", createLink()).Methods(http.MethodPost)
-	r.HandleFunc("/file", CreateFile()).Methods(http.MethodPost)
+	r.HandleFunc("/link", createLink(withDeps)).Methods(http.MethodPost)
+	r.HandleFunc("/file", createFile()).Methods(http.MethodPost)
 	r.HandleFunc("/download-file/{alias}", downloadFile()).Methods(http.MethodGet)
-	r.HandleFunc("/find/{alias}", find()).Methods(http.MethodGet)
+	r.HandleFunc("/find/{alias}", find(withDeps)).Methods(http.MethodGet)
 
 	server := &http.Server{
 		Addr:              ":" + port,

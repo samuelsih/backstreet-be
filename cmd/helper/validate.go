@@ -11,7 +11,7 @@ type request interface {
 	model.ShortenRequest | model.ShortenFileRequest
 }
 
-func ValidateStruct[T request](data T) (error) {
+func ValidateStruct[T request](data T) error {
 	if isZero(data) {
 		return errors.New("unknown request type")
 	}
