@@ -5,9 +5,12 @@ import (
 	"backstreetlinkv2/cmd/repo"
 	"backstreetlinkv2/cmd/service"
 	"backstreetlinkv2/db"
+	"backstreetlinkv2/db/migrations"
 	"context"
 	"errors"
+	"flag"
 	"github.com/gorilla/mux"
+	"github.com/rs/zerolog"
 	"log"
 	"net/http"
 	"os"
@@ -19,6 +22,11 @@ import (
 const shutdownTimeout = 30 * time.Second
 
 func main() {
+	wantFreshDB := flag.Bool("fresh", false, "drop the DB and remigrate it")
+	flag.Parse()
+
+	log.SetOutput(zerolog.New(os.Stdout))
+
 	environment := os.Getenv("ENV")
 	if environment == "" {
 		environment = "LOCAL"
@@ -26,7 +34,7 @@ func main() {
 
 	dsn := os.Getenv("COCKROACH_DSN")
 	if dsn == "" {
-		log.Fatal("no dsn cockroach")
+		log.Fatal("no dsn")
 	}
 
 	dbClient, err := db.ConnectPG(dsn)
@@ -34,13 +42,27 @@ func main() {
 		log.Fatalf("can't connect to db: %v", err)
 	}
 
+	if *wantFreshDB {
+		ctx := context.Background()
+
+		_, err := dbClient.Exec(ctx, migrations.DownCmd)
+		if err != nil {
+			log.Fatalf("cant drop table: %v", err)
+		}
+
+		_, err = dbClient.Exec(ctx, migrations.UpCmd)
+		if err != nil {
+			log.Fatalf("cant create table: %v", err)
+		}
+	}
+
 	port := os.Getenv("port")
 	if port == "" {
 		port = ":8080"
 	}
 
-	mux := mux.NewRouter()
-	mux.Use(
+	router := mux.NewRouter()
+	router.Use(
 		middleware.CORS(environment),
 		middleware.Recoverer,
 		middleware.Limit,
@@ -60,13 +82,13 @@ func main() {
 		log.Fatalf("error s3: %v", err)
 	}
 
-	withDeps := service.NewLinkDeps(pgRepo, s3Service)
+	programService := service.NewLinkDeps(pgRepo, s3Service)
 
-	r := mux.PathPrefix("/api/v2").Subrouter()
-	r.HandleFunc("/link", createLink(withDeps)).Methods(http.MethodPost)
-	r.HandleFunc("/file", createFile()).Methods(http.MethodPost)
-	r.HandleFunc("/download-file/{alias}", downloadFile()).Methods(http.MethodGet)
-	r.HandleFunc("/find/{alias}", find(withDeps)).Methods(http.MethodGet)
+	r := router.PathPrefix("/api/v2").Subrouter()
+	r.HandleFunc("/link", createLink(programService)).Methods(http.MethodPost)
+	r.HandleFunc("/file", createFile(programService)).Methods(http.MethodPost)
+	r.HandleFunc("/download-file/{alias}", downloadFile(programService)).Methods(http.MethodGet)
+	r.HandleFunc("/find/{alias}", find(programService)).Methods(http.MethodGet)
 
 	server := &http.Server{
 		Addr:              ":" + port,

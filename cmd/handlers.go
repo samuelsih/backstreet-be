@@ -8,9 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
+	"github.com/rs/zerolog/log"
 	"io"
-	"log"
-	"mime/multipart"
 	"net/http"
 	"os"
 )
@@ -19,10 +18,13 @@ const (
 	statusBadReq      = http.StatusBadRequest
 	statusNotFound    = http.StatusNotFound
 	statusInternalErr = http.StatusInternalServerError
+	fileMaxSize       = 10 << 20
 )
 
 func createLink(svc *service.Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
 		var request model.ShortenRequest
 
 		err := decodeJSONLinkRequest(r, &request)
@@ -35,14 +37,14 @@ func createLink(svc *service.Deps) http.HandlerFunc {
 		output := svc.InsertLink(r.Context(), request)
 		w.WriteHeader(output.Code)
 		if err := json.NewEncoder(w).Encode(output); err != nil {
-			log.Println("err encode: " + err.Error())
+			log.Err(err)
 		}
 	}
 }
 
-func createFile() http.HandlerFunc {
+func createFile(svc *service.Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
+		w.Header().Set("Content-Type", "application/json")
 
 		reader, err := r.MultipartReader()
 		if err != nil {
@@ -56,6 +58,10 @@ func createFile() http.HandlerFunc {
 		for i := 0; i < 2; i++ {
 			part, err := reader.NextPart()
 			if err != nil {
+				if closeErr := part.Close(); closeErr != nil {
+					log.Err(closeErr)
+				}
+
 				w.WriteHeader(statusNotFound)
 				sendJSONErr(w, statusNotFound, err.Error())
 				return
@@ -70,8 +76,27 @@ func createFile() http.HandlerFunc {
 					return
 				}
 			case "file_field":
+				if err := checkLimitFileSize(part); err != nil {
+					w.WriteHeader(statusBadReq)
+					sendJSONErr(w, statusBadReq, err.Error())
+					return
+				}
 
+				request.RawFile = part
+				request.Filename = part.FileName()
+
+			default:
+				err := fmt.Sprintf("unexpected field %v", part.FormName())
+				w.WriteHeader(statusBadReq)
+				sendJSONErr(w, statusBadReq, err)
+				return
 			}
+		}
+
+		output := svc.InsertFile(r.Context(), request)
+		w.WriteHeader(output.Code)
+		if err := json.NewEncoder(w).Encode(output); err != nil {
+			log.Err(err)
 		}
 	}
 
@@ -79,6 +104,8 @@ func createFile() http.HandlerFunc {
 
 func find(svc *service.Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
 		param := mux.Vars(r)
 		if _, ok := param["alias"]; !ok {
 			w.WriteHeader(statusNotFound)
@@ -89,14 +116,33 @@ func find(svc *service.Deps) http.HandlerFunc {
 		output := svc.Find(r.Context(), param["alias"])
 		w.WriteHeader(output.Code)
 		if err := json.NewEncoder(w).Encode(output); err != nil {
-			log.Println("err encode: " + err.Error())
+			log.Err(err)
 		}
 	}
 }
 
-func downloadFile() http.HandlerFunc {
+func downloadFile(svc *service.Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		param := mux.Vars(r)
+		if _, ok := param["alias"]; !ok {
+			w.WriteHeader(statusNotFound)
+			w.Header().Set("Content-Type", "application/json")
+			sendJSONErr(w, statusNotFound, "not found")
+			return
+		}
 
+		output := svc.DownloadFile(r.Context(), param["alias"])
+
+		w.Header().Set("Content-Disposition", output.ContentDisposition)
+		w.Header().Set("Content-Type", output.ContentType)
+		w.Header().Set("Content-Length", output.ContentLength)
+
+		_, err := io.Copy(w, output.File)
+		if err != nil {
+			log.Err(err)
+			w.WriteHeader(statusInternalErr)
+			sendJSONErr(w, statusInternalErr, err.Error())
+		}
 	}
 }
 
@@ -107,7 +153,7 @@ func sendJSONErr(w io.Writer, code int, msg string) {
 	}
 
 	if err := json.NewEncoder(w).Encode(m); err != nil {
-		log.Println("err encode: " + err.Error())
+		log.Err(err)
 	}
 }
 
@@ -115,7 +161,11 @@ func decodeJSONLinkRequest[inType Input](r *http.Request, in *inType) error {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 
-	defer r.Body.Close()
+	defer func() {
+		if err := r.Body.Close(); err != nil {
+			log.Err(err)
+		}
+	}()
 
 	if err := decoder.Decode(&in); err != nil {
 		return err
@@ -128,18 +178,21 @@ func decodeJSONLinkRequest[inType Input](r *http.Request, in *inType) error {
 	return nil
 }
 
-func checkLimitFileSize(part multipart.File) error {
+func checkLimitFileSize(part io.Reader) error {
 	buf := bufio.NewReader(part)
 
-	file, err := os.CreateTemp("", "")
+	file, err := os.Open("")
 	if err != nil {
 		return err
 	}
 
-	defer os.Remove(file.Name())
-	defer file.Close()
+	defer func() {
+		if err = file.Close(); err != nil {
+			log.Err(err)
+		}
+	}()
 
-	limit := io.MultiReader(buf, io.LimitReader(part, (10<<20)-511))
+	limit := io.MultiReader(buf, io.LimitReader(part, fileMaxSize))
 	written, err := io.Copy(file, limit)
 
 	if err != nil && written > (10<<20) {

@@ -1,7 +1,9 @@
 package repo
 
 import (
+	"backstreetlinkv2/cmd/helper"
 	"context"
+	"errors"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -9,7 +11,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"io"
-	"mime/multipart"
+)
+
+var (
+	NoObjectID = errors.New("object id is not found/empty")
 )
 
 type ObjectScanner struct {
@@ -71,25 +76,29 @@ func setSSEBucket(bucketName string, service *s3.S3) error {
 	return err
 }
 
-func (o *ObjectScanner) Upload(ctx context.Context, filename string, file multipart.File) error {
+func (o *ObjectScanner) Upload(ctx context.Context, filename string, file io.Reader) error {
+	const op = helper.Op("repo.ObjectScanner.Upload")
+
 	output, err := o.uploader.UploadWithContext(ctx, &s3manager.UploadInput{
 		Bucket: aws.String(o.bucket),
 		Key:    aws.String(filename),
 		Body:   file,
 	})
 
-	if output.UploadID == "" {
-		return InternalErr
+	if err != nil {
+		return helper.E(op, helper.KindUnexpected, err, CantProcessRequest)
 	}
 
-	if err != nil {
-		return err
+	if output.UploadID == "" {
+		return helper.E(op, helper.KindUnexpected, NoObjectID, CantProcessRequest)
 	}
 
 	return nil
 }
 
 func (o *ObjectScanner) Get(ctx context.Context, filename string, file io.WriterAt) error {
+	const op = helper.Op("repo.ObjectScanner.Get")
+
 	objectInput := &s3.GetObjectInput{
 		Bucket: aws.String(o.bucket),
 		Key:    aws.String(filename),
@@ -97,7 +106,7 @@ func (o *ObjectScanner) Get(ctx context.Context, filename string, file io.Writer
 
 	_, err := o.downloader.DownloadWithContext(ctx, file, objectInput)
 	if err != nil {
-		return err
+		return helper.E(op, helper.KindUnexpected, err, CantProcessRequest)
 	}
 
 	return nil

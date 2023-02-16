@@ -1,17 +1,24 @@
 package repo
 
 import (
+	"backstreetlinkv2/cmd/helper"
 	"backstreetlinkv2/cmd/model"
 	"context"
 	"database/sql"
 	"errors"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 var (
-	UniqueErr   = errors.New("link already taken")
-	NotFoundErr = errors.New("not found")
-	InternalErr = errors.New("internal error")
+	UniqueErr         = errors.New("link already taken")
+	NotFoundErr       = errors.New("not found")
+	NoRowsAffectedErr = errors.New("no rows affected")
+)
+
+const (
+	UniqueConstraint   = "23505"
+	CantProcessRequest = "can't process your request"
 )
 
 type PGRepo struct {
@@ -19,22 +26,32 @@ type PGRepo struct {
 }
 
 func (p *PGRepo) Insert(ctx context.Context, key string, dataSource any) error {
-	const query = `INSERT INTO source (key_source, attrs) VALUES ($1, $2)`
+	const op = helper.Op("repo.PGRepo.Insert")
+	const query = `INSERT INTO sources (key_source, attrs) VALUES ($1, $2)`
 
 	cmd, err := p.db.Exec(ctx, query, key, dataSource)
 	if err != nil {
-		return err
+		var pgErr *pgconn.PgError
+
+		if errors.As(err, &pgErr) {
+			if pgErr.Code == UniqueConstraint {
+				return helper.E(op, helper.KindBadRequest, UniqueErr, UniqueErr.Error())
+			}
+		}
+
+		return helper.E(op, helper.KindUnexpected, err, CantProcessRequest)
 	}
 
 	if cmd.RowsAffected() == 0 {
-		return InternalErr
+		return helper.E(op, helper.KindUnexpected, NoRowsAffectedErr, CantProcessRequest)
 	}
 
 	return nil
 }
 
 func (p *PGRepo) Get(ctx context.Context, key string) (model.ShortenResponse, error) {
-	const query = ` SELECT attrs FROM source WHERE key_source = $1`
+	const op = helper.Op("repo.PGRepo.Get")
+	const query = ` SELECT attrs FROM sources WHERE key_source = $1`
 
 	var resp model.ShortenResponse
 
@@ -42,10 +59,10 @@ func (p *PGRepo) Get(ctx context.Context, key string) (model.ShortenResponse, er
 
 	if err != nil {
 		if err == pgx.ErrNoRows || err == sql.ErrNoRows {
-			return resp, NotFoundErr
+			return resp, helper.E(op, helper.KindNotFound, NotFoundErr, NotFoundErr.Error())
 		}
 
-		return resp, InternalErr
+		return resp, helper.E(op, helper.KindUnexpected, err, CantProcessRequest)
 	}
 
 	return resp, nil
