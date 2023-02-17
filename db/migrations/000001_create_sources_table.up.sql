@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS sources(
+    key_source VARCHAR(30) NOT NULL PRIMARY KEY UNIQUE,
+    attrs JSONB
+);
