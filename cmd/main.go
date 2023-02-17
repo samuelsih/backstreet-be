@@ -61,6 +61,12 @@ func main() {
 		port = ":8080"
 	}
 
+	accessKey := os.Getenv("AWS_ACCESS_KEY")
+	secretKey := os.Getenv("AWS_SECRET_KEY")
+	endpoint := os.Getenv("AWS_ENDPOINT")
+	region := os.Getenv("AWS_REGION")
+	bucket := os.Getenv("AWS_BUCKETNAME")
+
 	router := mux.NewRouter()
 	router.Use(
 		middleware.CORS(environment),
@@ -70,12 +76,12 @@ func main() {
 
 	pgRepo := repo.NewPGRepo(dbClient)
 	s3Service, err := repo.NewObjectScanner(repo.ObjectConfig{
-		AccessKey:        "",
-		SecretKey:        "",
-		Endpoint:         "",
-		Region:           "",
+		AccessKey:        accessKey,
+		SecretKey:        secretKey,
+		Endpoint:         endpoint,
+		Region:           region,
 		ForceS3PathStyle: false,
-		Bucket:           "",
+		Bucket:           bucket,
 	})
 
 	if err != nil {
@@ -92,8 +98,8 @@ func main() {
 
 	server := &http.Server{
 		Addr:              ":" + port,
-		ReadTimeout:       5 * time.Second,
-		WriteTimeout:      5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
 		IdleTimeout:       30 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
 		MaxHeaderBytes:    10 * 1024 * 1024,
@@ -121,4 +127,13 @@ func main() {
 	if err := server.Shutdown(ctx); err != nil {
 		log.Printf("shutting down server error: %v", err)
 	}
+}
+
+func getFromEnvWithDefault(key string, defaultValue string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		value = defaultValue
+	}
+
+	return value
 }
