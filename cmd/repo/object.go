@@ -48,9 +48,9 @@ func NewObjectScanner(cfg ObjectConfig) (*ObjectScanner, error) {
 
 	s3Service := s3.New(awsSession)
 
-	if err := setSSEBucket(cfg.Bucket, s3Service); err != nil {
-		return nil, err
-	}
+	//if err := setSSEBucket(cfg.Bucket, s3Service); err != nil {
+	//	return nil, err
+	//}
 
 	return &ObjectScanner{
 		svc:        s3Service,

@@ -53,6 +53,11 @@ func (d *Deps) InsertLink(ctx context.Context, data model.ShortenRequest) Insert
 	const op = helper.Op("InsertLink")
 	var out InsertLinkOutput
 
+	if data.Type != model.TypeLink {
+		out.SetErr(helper.E(op, helper.KindBadRequest, WrongTypeErr, WrongTypeErr.Error()))
+		return out
+	}
+
 	err := d.storage.Insert(ctx, data.Alias, data)
 	if err != nil {
 		out.SetErr(helper.E(op, helper.GetKind(err), err, err.Error()))
@@ -78,6 +83,11 @@ func (d *Deps) InsertFile(ctx context.Context, data model.ShortenFileRequest) In
 	const op = helper.Op("InsertFile")
 	var out InsertFileOutput
 
+	if data.Type != model.TypeFile {
+		out.SetErr(helper.E(op, helper.KindBadRequest, WrongTypeErr, WrongTypeErr.Error()))
+		return out
+	}
+
 	err := d.storage.Insert(ctx, data.Alias, data)
 	if err != nil {
 		out.SetErr(helper.E(op, helper.GetKind(err), err, err.Error()))
@@ -100,7 +110,7 @@ func (d *Deps) InsertFile(ctx context.Context, data model.ShortenFileRequest) In
 
 type FindOutput struct {
 	CommonResponse
-	Response model.ShortenResponse
+	Response model.ShortenResponse `json:"response"`
 }
 
 func (d *Deps) Find(ctx context.Context, key string) FindOutput {
@@ -121,10 +131,10 @@ func (d *Deps) Find(ctx context.Context, key string) FindOutput {
 
 type DownloadFileOutput struct {
 	CommonResponse
-	ContentDisposition string
-	ContentType        string
-	ContentLength      string
-	File               io.Reader
+	ContentDisposition string    `json:"-"`
+	ContentType        string    `json:"-"`
+	ContentLength      string    `json:"-"`
+	File               io.Reader `json:"-"`
 }
 
 func (d *Deps) DownloadFile(ctx context.Context, key string) DownloadFileOutput {

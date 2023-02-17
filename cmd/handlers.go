@@ -29,8 +29,8 @@ func createLink(svc *service.Deps) http.HandlerFunc {
 
 		err := decodeJSONLinkRequest(r, &request)
 		if err != nil {
-			w.WriteHeader(statusNotFound)
-			sendJSONErr(w, statusNotFound, err.Error())
+			w.WriteHeader(statusBadReq)
+			sendJSONErr(w, statusBadReq, err.Error())
 			return
 		}
 
@@ -48,8 +48,8 @@ func createFile(svc *service.Deps) http.HandlerFunc {
 
 		reader, err := r.MultipartReader()
 		if err != nil {
-			w.WriteHeader(statusNotFound)
-			sendJSONErr(w, statusNotFound, err.Error())
+			w.WriteHeader(statusBadReq)
+			sendJSONErr(w, statusBadReq, err.Error())
 			return
 		}
 
@@ -62,8 +62,8 @@ func createFile(svc *service.Deps) http.HandlerFunc {
 					log.Err(closeErr)
 				}
 
-				w.WriteHeader(statusNotFound)
-				sendJSONErr(w, statusNotFound, err.Error())
+				w.WriteHeader(statusBadReq)
+				sendJSONErr(w, statusBadReq, err.Error())
 				return
 			}
 
@@ -157,7 +157,7 @@ func sendJSONErr(w io.Writer, code int, msg string) {
 	}
 }
 
-func decodeJSONLinkRequest[inType Input](r *http.Request, in *inType) error {
+func decodeJSONLinkRequest[inType helper.Request](r *http.Request, in *inType) error {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 
@@ -204,8 +204,4 @@ func checkLimitFileSize(part io.Reader) error {
 	}
 
 	return nil
-}
-
-type Input interface {
-	model.ShortenRequest | model.ShortenFileRequest
 }

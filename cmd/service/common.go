@@ -26,5 +26,10 @@ func (c *CommonResponse) SetErr(err error) {
 	c.Code = helper.GetKind(err)
 	c.Message = err.Error()
 
-	log.Debug().Int("status", c.Code).Str("trace", strings.Join(ops, " - ")).Msg(c.Message)
+	log.Debug().
+		Int("status", c.Code).
+		Str("trace", strings.Join(ops, " - ")).
+		Errs("errs", helper.TraceErr(err)).
+		Msg(err.Error())
+
 }

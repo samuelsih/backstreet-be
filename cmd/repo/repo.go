@@ -51,7 +51,7 @@ func (p *PGRepo) Insert(ctx context.Context, key string, dataSource any) error {
 
 func (p *PGRepo) Get(ctx context.Context, key string) (model.ShortenResponse, error) {
 	const op = helper.Op("repo.PGRepo.Get")
-	const query = ` SELECT attrs FROM sources WHERE key_source = $1`
+	const query = `SELECT attrs FROM sources WHERE key_source = $1`
 
 	var resp model.ShortenResponse
 

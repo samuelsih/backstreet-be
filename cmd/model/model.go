@@ -17,30 +17,30 @@ var (
 )
 
 type Shorten struct {
-	Alias      string `json:"alias" bson:"_id"`
-	RedirectTo string `json:"redirect_to" bson:"redirect_to,omitempty"`
-	Type       string `json:"type" bson:"type"`
-	Filename   string `json:"data_source" bson:"data_source,omitempty"`
+	Alias      string `json:"alias"`
+	RedirectTo string `json:"redirect_to"`
+	Type       string `json:"type"`
+	Filename   string `json:"data_source"`
 }
 
 type ShortenRequest struct {
-	Alias      string `json:"alias" bson:"_id" validate:"required,min=5,max=30,alphanum"`
-	Type       string `json:"type" bson:"type" validate:"eq=LINK"`
-	RedirectTo string `json:"redirect_to" bson:"redirect_to,omitempty" validate:"url"`
+	Alias      string `json:"alias" validate:"required,min=5,max=30,alphanum"`
+	Type       string `json:"type" validate:"eq=LINK"`
+	RedirectTo string `json:"redirect_to" validate:"url"`
 }
 
 type ShortenFileRequest struct {
-	Alias    string    `json:"alias" bson:"_id" validate:"required,min=5,max=30,alphanum"`
-	Filename string    `json:"-" bson:"filename"`
-	Type     string    `json:"type" bson:"type" validate:"oneof='FILE'"`
+	Alias    string    `json:"alias" validate:"required,min=5,max=30,alphanum"`
+	Filename string    `json:"-"`
+	Type     string    `json:"type" validate:"oneof='FILE'"`
 	RawFile  io.Reader `json:"-"`
 }
 
 type ShortenResponse struct {
+	Type       string `json:"type"`
 	Alias      string `json:"alias"`
 	RedirectTo string `json:"redirect_to"`
-	Type       string `json:"type"`
-	Filename   string `json:"filename"` //nama file asli
+	Filename   string `json:"filename"`
 }
 
 func (s ShortenResponse) Value() (driver.Value, error) {
@@ -48,8 +48,16 @@ func (s ShortenResponse) Value() (driver.Value, error) {
 }
 
 func (s *ShortenResponse) Scan(val any) error {
-	b, ok := val.([]byte)
-	if !ok {
+	var b []byte
+
+	switch v := val.(type) {
+	case string:
+		b = []byte(v)
+
+	case []byte:
+		b = v
+
+	default:
 		return ByteAssertionErr
 	}
 

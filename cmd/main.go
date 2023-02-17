@@ -10,6 +10,7 @@ import (
 	"errors"
 	"flag"
 	"github.com/gorilla/mux"
+	_ "github.com/joho/godotenv/autoload"
 	"github.com/rs/zerolog"
 	"log"
 	"net/http"
@@ -32,9 +33,9 @@ func main() {
 		environment = "LOCAL"
 	}
 
-	dsn := os.Getenv("COCKROACH_DSN")
+	dsn := os.Getenv("DB_DSN")
 	if dsn == "" {
-		log.Fatal("no dsn")
+		dsn = "postgres://postgres:postgres@localhost:5432/backstreet"
 	}
 
 	dbClient, err := db.ConnectPG(dsn)
@@ -103,9 +104,12 @@ func main() {
 		IdleTimeout:       30 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
 		MaxHeaderBytes:    10 * 1024 * 1024,
+		Handler:           router,
 	}
 
 	go func() {
+		log.Println("listen and serve on port", port)
+
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("cant start server: %v", err)
 		}

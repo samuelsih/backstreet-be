@@ -54,6 +54,21 @@ func Ops(err error) []Op {
 	}
 }
 
+func TraceErr(err error) []error {
+	var res []error
+
+	for {
+		subErr, ok := err.(*Error)
+		if !ok {
+			return res
+		}
+
+		res = append(res, subErr.Err)
+
+		err = subErr.Err
+	}
+}
+
 func GetKind(err error) Kind {
 	for {
 		e, ok := err.(*Error)
