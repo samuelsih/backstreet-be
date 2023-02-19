@@ -27,7 +27,7 @@ func createLink(svc *service.Deps) http.HandlerFunc {
 
 		var request model.ShortenRequest
 
-		err := decodeJSONLinkRequest(r, &request)
+		err := decodeJSONLinkRequest(r.Body, &request)
 		if err != nil {
 			w.WriteHeader(statusBadReq)
 			sendJSONErr(w, statusBadReq, err.Error())
@@ -57,24 +57,27 @@ func createFile(svc *service.Deps) http.HandlerFunc {
 
 		for i := 0; i < 2; i++ {
 			part, err := reader.NextPart()
-			if err != nil {
+			log.Print(part.FormName())
+			if err != nil && err != io.EOF {
+				w.WriteHeader(statusBadReq)
+				println("error nextpart")
 				if closeErr := part.Close(); closeErr != nil {
 					log.Err(closeErr)
 				}
 
-				w.WriteHeader(statusBadReq)
 				sendJSONErr(w, statusBadReq, err.Error())
 				return
 			}
 
 			switch part.FormName() {
 			case "json_field":
-				err := decodeJSONLinkRequest(r, &request)
+				err := decodeJSONLinkRequest(part, &request)
 				if err != nil {
 					w.WriteHeader(statusBadReq)
 					sendJSONErr(w, statusBadReq, err.Error())
 					return
 				}
+
 			case "file_field":
 				if err := checkLimitFileSize(part); err != nil {
 					w.WriteHeader(statusBadReq)
@@ -157,12 +160,12 @@ func sendJSONErr(w io.Writer, code int, msg string) {
 	}
 }
 
-func decodeJSONLinkRequest[inType helper.Request](r *http.Request, in *inType) error {
-	decoder := json.NewDecoder(r.Body)
+func decodeJSONLinkRequest[inType helper.Request](r io.ReadCloser, in *inType) error {
+	decoder := json.NewDecoder(r)
 	decoder.DisallowUnknownFields()
 
 	defer func() {
-		if err := r.Body.Close(); err != nil {
+		if err := r.Close(); err != nil {
 			log.Err(err)
 		}
 	}()
@@ -181,10 +184,16 @@ func decodeJSONLinkRequest[inType helper.Request](r *http.Request, in *inType) e
 func checkLimitFileSize(part io.Reader) error {
 	buf := bufio.NewReader(part)
 
-	file, err := os.Open("")
+	file, err := os.CreateTemp("", "")
 	if err != nil {
 		return err
 	}
+
+	defer func() {
+		if err = os.Remove(file.Name()); err != nil {
+			log.Err(err)
+		}
+	}()
 
 	defer func() {
 		if err = file.Close(); err != nil {

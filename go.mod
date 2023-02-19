@@ -11,6 +11,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/rs/cors v1.8.2
 	github.com/rs/zerolog v1.29.0
+	github.com/testcontainers/testcontainers-go v0.18.0
 	golang.org/x/time v0.0.0-20220609170525-579cf78fd858
 )
 
@@ -45,7 +46,6 @@ require (
 	github.com/opencontainers/runc v1.1.3 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/sirupsen/logrus v1.9.0 // indirect
-	github.com/testcontainers/testcontainers-go v0.18.0 // indirect
 	golang.org/x/crypto v0.6.0 // indirect
 	golang.org/x/net v0.6.0 // indirect
 	golang.org/x/sys v0.5.0 // indirect

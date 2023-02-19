@@ -71,3 +71,7 @@ func (p *PGRepo) Get(ctx context.Context, key string) (model.ShortenResponse, er
 func NewPGRepo(db *pgx.Conn) *PGRepo {
 	return &PGRepo{db: db}
 }
+
+func f() {
+
+}

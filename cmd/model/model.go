@@ -30,10 +30,10 @@ type ShortenRequest struct {
 }
 
 type ShortenFileRequest struct {
-	Alias    string    `json:"alias" validate:"required,min=5,max=30,alphanum"`
-	Filename string    `json:"-"`
-	Type     string    `json:"type" validate:"oneof='FILE'"`
-	RawFile  io.Reader `json:"-"`
+	Alias    string        `json:"alias" validate:"required,min=5,max=30,alphanum"`
+	Filename string        `json:"-"`
+	Type     string        `json:"type" validate:"oneof='FILE'"`
+	RawFile  io.ReadCloser `json:"-"`
 }
 
 type ShortenResponse struct {

@@ -56,6 +56,7 @@ func NewObjectScanner(cfg ObjectConfig) (*ObjectScanner, error) {
 		svc:        s3Service,
 		uploader:   s3manager.NewUploaderWithClient(s3Service),
 		downloader: s3manager.NewDownloaderWithClient(s3Service),
+		bucket:     cfg.Bucket,
 	}, nil
 }
 
@@ -76,7 +77,7 @@ func setSSEBucket(bucketName string, service *s3.S3) error {
 	return err
 }
 
-func (o *ObjectScanner) Upload(ctx context.Context, filename string, file io.Reader) error {
+func (o *ObjectScanner) Upload(ctx context.Context, filename string, file io.ReadCloser) error {
 	const op = helper.Op("repo.ObjectScanner.Upload")
 
 	output, err := o.uploader.UploadWithContext(ctx, &s3manager.UploadInput{

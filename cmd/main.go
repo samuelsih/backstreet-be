@@ -59,14 +59,14 @@ func main() {
 
 	port := os.Getenv("port")
 	if port == "" {
-		port = ":8080"
+		port = "8080"
 	}
 
-	accessKey := os.Getenv("AWS_ACCESS_KEY")
-	secretKey := os.Getenv("AWS_SECRET_KEY")
-	endpoint := os.Getenv("AWS_ENDPOINT")
-	region := os.Getenv("AWS_REGION")
-	bucket := os.Getenv("AWS_BUCKETNAME")
+	accessKey := os.Getenv("NEW_AWS_ACCESS_KEY")
+	secretKey := os.Getenv("NEW_AWS_SECRET_KEY")
+	endpoint := os.Getenv("NEW_AWS_ENDPOINT")
+	region := os.Getenv("NEW_AWS_REGION")
+	bucket := os.Getenv("NEW_AWS_BUCKETNAME")
 
 	router := mux.NewRouter()
 	router.Use(
@@ -81,7 +81,7 @@ func main() {
 		SecretKey:        secretKey,
 		Endpoint:         endpoint,
 		Region:           region,
-		ForceS3PathStyle: false,
+		ForceS3PathStyle: true,
 		Bucket:           bucket,
 	})
 

@@ -26,7 +26,7 @@ type Storage interface {
 }
 
 type Uploader interface {
-	Upload(ctx context.Context, filename string, file io.Reader) error
+	Upload(ctx context.Context, filename string, file io.ReadCloser) error
 	Get(ctx context.Context, filename string, file io.WriterAt) error
 }
 
@@ -88,13 +88,20 @@ func (d *Deps) InsertFile(ctx context.Context, data model.ShortenFileRequest) In
 		return out
 	}
 
-	err := d.storage.Insert(ctx, data.Alias, data)
+	file, err := os.Create(data.Filename)
+	if err != nil {
+		out.SetErr(err)
+	}
+
+	defer file.Close()
+
+	err = d.uploader.Upload(ctx, data.Filename, data.RawFile)
 	if err != nil {
 		out.SetErr(helper.E(op, helper.GetKind(err), err, err.Error()))
 		return out
 	}
 
-	err = d.uploader.Upload(ctx, data.Filename, data.RawFile)
+	err = d.storage.Insert(ctx, data.Alias, data)
 	if err != nil {
 		out.SetErr(helper.E(op, helper.GetKind(err), err, err.Error()))
 		return out
