@@ -4,12 +4,11 @@ import (
 	"backstreetlinkv2/cmd/helper"
 	"context"
 	"errors"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3iface"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"io"
 )
 
@@ -18,97 +17,96 @@ var (
 )
 
 type ObjectScanner struct {
-	svc        s3iface.S3API
-	uploader   *s3manager.Uploader
-	downloader *s3manager.Downloader
-	bucket     string
+	client     *s3.Client
+	bucketName string
 }
 
 type ObjectConfig struct {
-	AccessKey        string
-	SecretKey        string
-	Endpoint         string
-	Region           string
-	ForceS3PathStyle bool
-
-	Bucket string
+	AccessKey string
+	SecretKey string
+	Endpoint  string
+	Bucket    string
 }
 
-func NewObjectScanner(cfg ObjectConfig) (*ObjectScanner, error) {
-	awsSession, err := session.NewSession(&aws.Config{
-		Credentials:      credentials.NewStaticCredentials(cfg.AccessKey, cfg.SecretKey, ""),
-		Endpoint:         aws.String(cfg.Endpoint),
-		Region:           aws.String(cfg.Region),
-		S3ForcePathStyle: aws.Bool(cfg.ForceS3PathStyle),
+func NewObjectScanner(ctx context.Context, cfg ObjectConfig) (*ObjectScanner, error) {
+	obj := &ObjectScanner{}
+	obj.bucketName = cfg.Bucket
+
+	creds := credentials.NewStaticCredentialsProvider(cfg.AccessKey, cfg.SecretKey, "")
+	customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+		return aws.Endpoint{
+			PartitionID:   "aws",
+			URL:           cfg.Endpoint,
+			SigningRegion: "de",
+		}, nil
 	})
 
+	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithCredentialsProvider(creds), config.WithEndpointResolverWithOptions(customResolver))
 	if err != nil {
 		return nil, err
 	}
 
-	s3Service := s3.New(awsSession)
+	obj.client = s3.NewFromConfig(awsCfg)
 
-	//if err := setSSEBucket(cfg.Bucket, s3Service); err != nil {
-	//	return nil, err
-	//}
-
-	return &ObjectScanner{
-		svc:        s3Service,
-		uploader:   s3manager.NewUploaderWithClient(s3Service),
-		downloader: s3manager.NewDownloaderWithClient(s3Service),
-		bucket:     cfg.Bucket,
-	}, nil
+	return obj, nil
 }
 
-func setSSEBucket(bucketName string, service *s3.S3) error {
-	defEnc := &s3.ServerSideEncryptionByDefault{
-		SSEAlgorithm: aws.String(s3.ServerSideEncryptionAes256),
-	}
-
-	rule := &s3.ServerSideEncryptionRule{ApplyServerSideEncryptionByDefault: defEnc}
-	rules := []*s3.ServerSideEncryptionRule{rule}
-	serverConfig := &s3.ServerSideEncryptionConfiguration{Rules: rules}
-	input := &s3.PutBucketEncryptionInput{
-		Bucket: aws.String(bucketName), ServerSideEncryptionConfiguration: serverConfig,
-	}
-
-	_, err := service.PutBucketEncryption(input)
-
-	return err
-}
-
-func (o *ObjectScanner) Upload(ctx context.Context, filename string, file io.ReadCloser) error {
+func (o *ObjectScanner) Upload(ctx context.Context, filename string, fileToUpload io.ReadCloser) error {
 	const op = helper.Op("repo.ObjectScanner.Upload")
 
-	output, err := o.uploader.UploadWithContext(ctx, &s3manager.UploadInput{
-		Bucket: aws.String(o.bucket),
-		Key:    aws.String(filename),
-		Body:   file,
+	defer fileToUpload.Close()
+
+	output, err := o.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:               aws.String(o.bucketName),
+		Key:                  aws.String(filename),
+		Body:                 fileToUpload,
+		ServerSideEncryption: types.ServerSideEncryptionAes256,
 	})
 
 	if err != nil {
 		return helper.E(op, helper.KindUnexpected, err, CantProcessRequest)
 	}
 
-	if output.UploadID == "" {
+	if output.ETag == nil {
 		return helper.E(op, helper.KindUnexpected, NoObjectID, CantProcessRequest)
 	}
 
 	return nil
 }
 
-func (o *ObjectScanner) Get(ctx context.Context, filename string, file io.WriterAt) error {
+type FileStat struct {
+	ContentType        string
+	ContentLength      int64
+	ContentDisposition string
+	Fill               string
+}
+
+func (o *ObjectScanner) Get(ctx context.Context, filename string, to io.Writer) (FileStat, error) {
 	const op = helper.Op("repo.ObjectScanner.Get")
 
 	objectInput := &s3.GetObjectInput{
-		Bucket: aws.String(o.bucket),
-		Key:    aws.String(filename),
+		Bucket:               aws.String(o.bucketName),
+		Key:                  aws.String(filename),
+		SSECustomerAlgorithm: aws.String("AES256"),
 	}
 
-	_, err := o.downloader.DownloadWithContext(ctx, file, objectInput)
+	object, err := o.client.GetObject(ctx, objectInput)
 	if err != nil {
-		return helper.E(op, helper.KindUnexpected, err, CantProcessRequest)
+		return FileStat{}, helper.E(op, helper.KindUnexpected, err, CantProcessRequest)
 	}
 
-	return nil
+	defer object.Body.Close()
+
+	_, err = io.Copy(to, object.Body)
+	if err != nil {
+		return FileStat{}, helper.E(op, helper.KindUnexpected, err, CantProcessRequest)
+	}
+
+	fs := FileStat{
+		ContentType:        aws.ToString(object.ContentType),
+		ContentLength:      object.ContentLength,
+		ContentDisposition: aws.ToString(object.ContentDisposition),
+	}
+
+	return fs, nil
 }

@@ -65,7 +65,6 @@ func main() {
 	accessKey := os.Getenv("NEW_AWS_ACCESS_KEY")
 	secretKey := os.Getenv("NEW_AWS_SECRET_KEY")
 	endpoint := os.Getenv("NEW_AWS_ENDPOINT")
-	region := os.Getenv("NEW_AWS_REGION")
 	bucket := os.Getenv("NEW_AWS_BUCKETNAME")
 
 	router := mux.NewRouter()
@@ -76,13 +75,11 @@ func main() {
 	)
 
 	pgRepo := repo.NewPGRepo(dbClient)
-	s3Service, err := repo.NewObjectScanner(repo.ObjectConfig{
-		AccessKey:        accessKey,
-		SecretKey:        secretKey,
-		Endpoint:         endpoint,
-		Region:           region,
-		ForceS3PathStyle: true,
-		Bucket:           bucket,
+	s3Service, err := repo.NewObjectScanner(context.Background(), repo.ObjectConfig{
+		AccessKey: accessKey,
+		SecretKey: secretKey,
+		Endpoint:  endpoint,
+		Bucket:    bucket,
 	})
 
 	if err != nil {

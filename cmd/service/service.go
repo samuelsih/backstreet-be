@@ -3,12 +3,12 @@ package service
 import (
 	"backstreetlinkv2/cmd/helper"
 	"backstreetlinkv2/cmd/model"
+	"backstreetlinkv2/cmd/repo"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"github.com/rs/zerolog/log"
 	"io"
-	"os"
 	"strconv"
 )
 
@@ -27,7 +27,7 @@ type Storage interface {
 
 type Uploader interface {
 	Upload(ctx context.Context, filename string, file io.ReadCloser) error
-	Get(ctx context.Context, filename string, file io.WriterAt) error
+	Get(ctx context.Context, filename string, wr io.Writer) (repo.FileStat, error)
 }
 
 type Deps struct {
@@ -88,12 +88,7 @@ func (d *Deps) InsertFile(ctx context.Context, data model.ShortenFileRequest) In
 		return out
 	}
 
-	file, err := os.Create(data.Filename)
-	if err != nil {
-		out.SetErr(err)
-	}
-
-	defer file.Close()
+	var err error
 
 	err = d.uploader.Upload(ctx, data.Filename, data.RawFile)
 	if err != nil {
@@ -138,10 +133,10 @@ func (d *Deps) Find(ctx context.Context, key string) FindOutput {
 
 type DownloadFileOutput struct {
 	CommonResponse
-	ContentDisposition string    `json:"-"`
-	ContentType        string    `json:"-"`
-	ContentLength      string    `json:"-"`
-	File               io.Reader `json:"-"`
+	ContentDisposition string        `json:"-"`
+	ContentType        string        `json:"-"`
+	ContentLength      string        `json:"-"`
+	File               io.ReadWriter `json:"-"`
 }
 
 func (d *Deps) DownloadFile(ctx context.Context, key string) DownloadFileOutput {
@@ -159,33 +154,21 @@ func (d *Deps) DownloadFile(ctx context.Context, key string) DownloadFileOutput 
 		return out
 	}
 
-	file, err := os.Open(record.Filename)
-	if err != nil {
-		out.SetErr(helper.E(op, helper.KindUnexpected, err, CantProcessRequest))
-		return out
-	}
+	out.File = bytes.NewBuffer([]byte{})
 
-	defer func() {
-		if err = file.Close(); err != nil {
-			log.Err(err)
-		}
-	}()
-
-	err = d.uploader.Get(ctx, record.Filename, file)
+	fs, err := d.uploader.Get(ctx, record.Filename, out.File)
 	if err != nil {
 		out.SetErr(helper.E(op, helper.GetKind(err), err, err.Error()))
 		return out
 	}
 
-	fileInfo, err := file.Stat()
-	if err != nil {
-		out.SetErr(helper.E(op, helper.KindUnexpected, err, CantProcessRequest))
-		return out
-	}
+	out.ContentDisposition = fs.ContentDisposition
+	out.ContentType = fs.ContentType
+	out.ContentLength = strconv.FormatInt(fs.ContentLength, 10)
 
-	out.ContentLength = strconv.FormatInt(fileInfo.Size(), 10)
-	out.ContentType = "multipart/form-data"
-	out.ContentDisposition = fmt.Sprintf(`attachment; filename="%s"`, fileInfo.Name())
+	if out.ContentDisposition == "" {
+		out.ContentDisposition = fmt.Sprintf("attachment; filename=\"%s\"", record.Filename)
+	}
 
 	out.SetOK()
 	return out

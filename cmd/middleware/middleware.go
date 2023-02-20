@@ -2,9 +2,10 @@ package middleware
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/rs/cors"
+	"github.com/rs/zerolog/log"
 	"net/http"
+	"runtime/debug"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -17,7 +18,13 @@ func Recoverer(next http.Handler) http.Handler {
 	f := func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rvr := recover(); rvr != nil {
-				fmt.Println("PANIC\t", rvr)
+				log.Error().
+					Stack().
+					Str("type", "recover_panic").
+					Timestamp().
+					Interface("recover_info", rvr).
+					Bytes("debug_stack", debug.Stack()).
+					Msg("log system error")
 
 				if rvr == http.ErrAbortHandler {
 					// susah handle yang satu ini, jadi dipanic aja
@@ -25,6 +32,12 @@ func Recoverer(next http.Handler) http.Handler {
 				}
 
 				w.WriteHeader(http.StatusInternalServerError)
+				if err := json.NewEncoder(w).Encode(map[string]any{
+					"code": http.StatusInternalServerError,
+					"msg":  http.StatusText(http.StatusInternalServerError),
+				}); err != nil {
+					log.Err(err)
+				}
 			}
 		}()
 

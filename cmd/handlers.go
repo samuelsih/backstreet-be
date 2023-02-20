@@ -4,14 +4,12 @@ import (
 	"backstreetlinkv2/cmd/helper"
 	"backstreetlinkv2/cmd/model"
 	"backstreetlinkv2/cmd/service"
-	"bufio"
 	"encoding/json"
-	"fmt"
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/log"
 	"io"
 	"net/http"
-	"os"
+	"strings"
 )
 
 const (
@@ -46,55 +44,34 @@ func createFile(svc *service.Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
-		reader, err := r.MultipartReader()
+		r.Body = http.MaxBytesReader(w, r.Body, fileMaxSize)
+		if err := r.ParseMultipartForm(fileMaxSize); err != nil {
+			w.WriteHeader(statusBadReq)
+			sendJSONErr(w, statusBadReq, err.Error())
+			return
+		}
+
+		defer r.Body.Close()
+
+		var request model.ShortenFileRequest
+
+		jsonReader := strings.NewReader(r.FormValue("json_field"))
+		err := decodeJSONLinkRequest(jsonReader, &request)
 		if err != nil {
 			w.WriteHeader(statusBadReq)
 			sendJSONErr(w, statusBadReq, err.Error())
 			return
 		}
 
-		var request model.ShortenFileRequest
-
-		for i := 0; i < 2; i++ {
-			part, err := reader.NextPart()
-			log.Print(part.FormName())
-			if err != nil && err != io.EOF {
-				w.WriteHeader(statusBadReq)
-				println("error nextpart")
-				if closeErr := part.Close(); closeErr != nil {
-					log.Err(closeErr)
-				}
-
-				sendJSONErr(w, statusBadReq, err.Error())
-				return
-			}
-
-			switch part.FormName() {
-			case "json_field":
-				err := decodeJSONLinkRequest(part, &request)
-				if err != nil {
-					w.WriteHeader(statusBadReq)
-					sendJSONErr(w, statusBadReq, err.Error())
-					return
-				}
-
-			case "file_field":
-				if err := checkLimitFileSize(part); err != nil {
-					w.WriteHeader(statusBadReq)
-					sendJSONErr(w, statusBadReq, err.Error())
-					return
-				}
-
-				request.RawFile = part
-				request.Filename = part.FileName()
-
-			default:
-				err := fmt.Sprintf("unexpected field %v", part.FormName())
-				w.WriteHeader(statusBadReq)
-				sendJSONErr(w, statusBadReq, err)
-				return
-			}
+		file, header, err := r.FormFile("file_field")
+		if err != nil {
+			w.WriteHeader(statusBadReq)
+			sendJSONErr(w, statusBadReq, err.Error())
+			return
 		}
+
+		request.RawFile = file
+		request.Filename = header.Filename
 
 		output := svc.InsertFile(r.Context(), request)
 		w.WriteHeader(output.Code)
@@ -135,6 +112,14 @@ func downloadFile(svc *service.Deps) http.HandlerFunc {
 		}
 
 		output := svc.DownloadFile(r.Context(), param["alias"])
+		if output.Code >= 400 && output.Code <= 599 {
+			w.WriteHeader(output.Code)
+			w.Header().Set("Content-Type", "application/json")
+			if err := json.NewEncoder(w).Encode(output); err != nil {
+				log.Err(err)
+			}
+			return
+		}
 
 		w.Header().Set("Content-Disposition", output.ContentDisposition)
 		w.Header().Set("Content-Type", output.ContentType)
@@ -160,55 +145,15 @@ func sendJSONErr(w io.Writer, code int, msg string) {
 	}
 }
 
-func decodeJSONLinkRequest[inType helper.Request](r io.ReadCloser, in *inType) error {
+func decodeJSONLinkRequest[inType helper.Request](r io.Reader, in *inType) error {
 	decoder := json.NewDecoder(r)
 	decoder.DisallowUnknownFields()
-
-	defer func() {
-		if err := r.Close(); err != nil {
-			log.Err(err)
-		}
-	}()
 
 	if err := decoder.Decode(&in); err != nil {
 		return err
 	}
 
 	if err := helper.ValidateStruct(*in); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func checkLimitFileSize(part io.Reader) error {
-	buf := bufio.NewReader(part)
-
-	file, err := os.CreateTemp("", "")
-	if err != nil {
-		return err
-	}
-
-	defer func() {
-		if err = os.Remove(file.Name()); err != nil {
-			log.Err(err)
-		}
-	}()
-
-	defer func() {
-		if err = file.Close(); err != nil {
-			log.Err(err)
-		}
-	}()
-
-	limit := io.MultiReader(buf, io.LimitReader(part, fileMaxSize))
-	written, err := io.Copy(file, limit)
-
-	if err != nil && written > (10<<20) {
-		return fmt.Errorf("max size reached: %w", err)
-	}
-
-	if err != nil {
 		return err
 	}
 

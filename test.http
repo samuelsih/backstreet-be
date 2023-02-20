@@ -1,0 +1,8 @@
+POST http://localhost:8080/api/v2/link
+Content-Type: application/json
+
+{ "alias" : "testing", "type": "LINK", "redirect_to": "https://google.com" }
+
+###
+
+GET http://localhost:8080/api/v2/find/testing
