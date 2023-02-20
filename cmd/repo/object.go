@@ -75,10 +75,9 @@ func (o *ObjectScanner) Upload(ctx context.Context, filename string, fileToUploa
 }
 
 type FileStat struct {
-	ContentType        string
-	ContentLength      int64
-	ContentDisposition string
-	Fill               string
+	ContentType   string
+	ContentLength int64
+	Fill          string
 }
 
 func (o *ObjectScanner) Get(ctx context.Context, filename string, to io.Writer) (FileStat, error) {
@@ -103,9 +102,8 @@ func (o *ObjectScanner) Get(ctx context.Context, filename string, to io.Writer) 
 	}
 
 	fs := FileStat{
-		ContentType:        aws.ToString(object.ContentType),
-		ContentLength:      object.ContentLength,
-		ContentDisposition: aws.ToString(object.ContentDisposition),
+		ContentType:   aws.ToString(object.ContentType),
+		ContentLength: object.ContentLength,
 	}
 
 	return fs, nil

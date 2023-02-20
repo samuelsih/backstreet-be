@@ -90,7 +90,7 @@ func (d *Deps) InsertFile(ctx context.Context, data model.ShortenFileRequest) In
 
 	var err error
 
-	err = d.uploader.Upload(ctx, data.Filename, data.RawFile)
+	err = d.uploader.Upload(ctx, data.Alias, data.RawFile)
 	if err != nil {
 		out.SetErr(helper.E(op, helper.GetKind(err), err, err.Error()))
 		return out
@@ -156,19 +156,15 @@ func (d *Deps) DownloadFile(ctx context.Context, key string) DownloadFileOutput 
 
 	out.File = bytes.NewBuffer([]byte{})
 
-	fs, err := d.uploader.Get(ctx, record.Filename, out.File)
+	fs, err := d.uploader.Get(ctx, record.Alias, out.File)
 	if err != nil {
 		out.SetErr(helper.E(op, helper.GetKind(err), err, err.Error()))
 		return out
 	}
 
-	out.ContentDisposition = fs.ContentDisposition
 	out.ContentType = fs.ContentType
 	out.ContentLength = strconv.FormatInt(fs.ContentLength, 10)
-
-	if out.ContentDisposition == "" {
-		out.ContentDisposition = fmt.Sprintf("attachment; filename=\"%s\"", record.Filename)
-	}
+	out.ContentDisposition = fmt.Sprintf("attachment; filename=\"%s\"", record.Filename)
 
 	out.SetOK()
 	return out
