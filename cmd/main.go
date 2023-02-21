@@ -21,6 +21,7 @@ import (
 )
 
 const shutdownTimeout = 30 * time.Second
+const maxCacheCountdown = 12 * time.Hour
 
 func main() {
 	wantFreshDB := flag.Bool("fresh", false, "drop the DB and remigrate it")
@@ -75,6 +76,11 @@ func main() {
 	)
 
 	pgRepo := repo.NewPGRepo(dbClient)
+	cache, err := repo.NewCache(context.Background(), maxCacheCountdown)
+	if err != nil {
+		log.Fatalf("error cache: %v", err)
+	}
+
 	s3Service, err := repo.NewObjectScanner(context.Background(), repo.ObjectConfig{
 		AccessKey: accessKey,
 		SecretKey: secretKey,
@@ -86,7 +92,7 @@ func main() {
 		log.Fatalf("error s3: %v", err)
 	}
 
-	programService := service.NewLinkDeps(pgRepo, s3Service)
+	programService := service.NewLinkDeps(pgRepo, s3Service, cache)
 
 	r := router.PathPrefix("/api/v2").Subrouter()
 	r.HandleFunc("/link", createLink(programService)).Methods(http.MethodPost)

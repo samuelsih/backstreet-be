@@ -11,14 +11,21 @@ import (
 	"log"
 	"os"
 	"testing"
+	"time"
 )
 
 var testDB *pgx.Conn
+var testCache *Cache
 
 func TestMain(m *testing.M) {
 	var err error
 
-	cleanup, err := setup()
+	cleanup, err := setupDB()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	testCache, err = NewCache(context.Background(), 10*time.Second)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -32,7 +39,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func setup() (func() error, error) {
+func setupDB() (func() error, error) {
 	ctx := context.Background()
 
 	req := testcontainers.ContainerRequest{

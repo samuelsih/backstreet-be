@@ -6,8 +6,10 @@ import (
 	"backstreetlinkv2/cmd/repo"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/rs/zerolog/log"
 	"io"
 	"strconv"
 )
@@ -30,15 +32,22 @@ type Uploader interface {
 	Get(ctx context.Context, filename string, wr io.Writer) (repo.FileStat, error)
 }
 
+type Cache interface {
+	Get(key string) ([]byte, error)
+	Set(key string, val []byte) error
+}
+
 type Deps struct {
 	storage  Storage
 	uploader Uploader
+	cache    Cache
 }
 
-func NewLinkDeps(storage Storage, uploader Uploader) *Deps {
+func NewLinkDeps(storage Storage, uploader Uploader, cache Cache) *Deps {
 	return &Deps{
 		storage:  storage,
 		uploader: uploader,
+		cache:    cache,
 	}
 }
 
@@ -63,6 +72,18 @@ func (d *Deps) InsertLink(ctx context.Context, data model.ShortenRequest) Insert
 		out.SetErr(helper.E(op, helper.GetKind(err), err, err.Error()))
 		return out
 	}
+
+	defer func() {
+		marshalled, err := json.Marshal(data)
+		if err != nil {
+			log.Warn().Err(err).Msg("cant marshal InsertLink")
+			return
+		}
+
+		if err := d.cache.Set(data.Alias, marshalled); err != nil {
+			log.Warn().Err(err).Msg("cant store to cache in InsertLink")
+		}
+	}()
 
 	out.Alias = data.Alias
 	out.Type = data.Type
@@ -102,6 +123,18 @@ func (d *Deps) InsertFile(ctx context.Context, data model.ShortenFileRequest) In
 		return out
 	}
 
+	defer func() {
+		marshalled, err := json.Marshal(data)
+		if err != nil {
+			log.Warn().Err(err).Msg("cant marshal InsertFile")
+			return
+		}
+
+		if err := d.cache.Set(data.Alias, marshalled); err != nil {
+			log.Warn().Err(err).Msg("cant store to cache in InsertFile")
+		}
+	}()
+
 	out.Alias = data.Alias
 	out.Type = data.Type
 	out.Filename = data.Filename
@@ -119,13 +152,29 @@ func (d *Deps) Find(ctx context.Context, key string) FindOutput {
 	const op = helper.Op("Find")
 	var out FindOutput
 
-	result, err := d.storage.Get(ctx, key)
-	if err != nil {
+	resultFromMemory, err := d.cache.Get(key)
+	if (err != nil) && !errors.Is(err, repo.CacheNotFound) {
 		out.SetErr(helper.E(op, helper.GetKind(err), err, err.Error()))
 		return out
 	}
 
-	out.Response = result
+	if errors.Is(err, repo.CacheNotFound) {
+		result, err := d.storage.Get(ctx, key)
+		if err != nil {
+			out.SetErr(helper.E(op, helper.GetKind(err), err, err.Error()))
+			return out
+		}
+
+		out.Response = result
+
+		out.SetOK()
+		return out
+	}
+
+	if err := json.Unmarshal(resultFromMemory, &out.Response); err != nil {
+		out.SetErr(helper.E(op, helper.GetKind(err), err, `can't get your data`))
+		return out
+	}
 
 	out.SetOK()
 	return out
