@@ -135,12 +135,3 @@ func main() {
 		log.Printf("shutting down server error: %v", err)
 	}
 }
-
-func getFromEnvWithDefault(key string, defaultValue string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		value = defaultValue
-	}
-
-	return value
-}
