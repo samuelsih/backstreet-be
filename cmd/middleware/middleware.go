@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"backstreetlinkv2/pkg"
 	"encoding/json"
 	"github.com/rs/cors"
 	"github.com/rs/zerolog/log"
@@ -114,5 +115,20 @@ func CORS(environment string) func(handler http.Handler) http.Handler {
 
 	return func(handler http.Handler) http.Handler {
 		return c.Handler(handler)
+	}
+}
+
+func Captcha(secretKey string) func(handler http.Handler) http.Handler {
+	return func(handler http.Handler) http.Handler {
+		f := func(w http.ResponseWriter, r *http.Request) {
+			code, err := pkg.ValidateCaptcha(r.Context(), secretKey, r.Header.Get("CF-TURNSTILE-RESPONSE"))
+			if err != nil {
+				w.WriteHeader(code)
+				json.NewEncoder(w).Encode(map[string]any{"error": err})
+				return
+			}
+		}
+
+		return http.HandlerFunc(f)
 	}
 }
