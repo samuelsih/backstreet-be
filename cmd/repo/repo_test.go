@@ -7,8 +7,6 @@ import (
 )
 
 func TestPGRepo_Insert(t *testing.T) {
-	t.Parallel()
-
 	p := PGRepo{testDB}
 	ctx := context.Background()
 
@@ -51,7 +49,10 @@ func TestPGRepo_Insert(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
+		tt := tt
+
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if err := p.Insert(tt.args.ctx, tt.args.key, tt.args.dataSource); (err != nil) != tt.wantErr {
 				t.Errorf("Insert() error = %v, wantErr %v", err, tt.wantErr)
 			}
