@@ -1,9 +1,9 @@
 package service
 
 import (
-	"backstreetlinkv2/cmd/helper"
-	"backstreetlinkv2/cmd/model"
-	"backstreetlinkv2/cmd/repo"
+	"backstreetlinkv2/api/helper"
+	"backstreetlinkv2/api/model"
+	"backstreetlinkv2/api/repo"
 	"bytes"
 	"context"
 	"encoding/json"

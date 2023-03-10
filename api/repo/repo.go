@@ -1,8 +1,8 @@
 package repo
 
 import (
-	"backstreetlinkv2/cmd/helper"
-	"backstreetlinkv2/cmd/model"
+	"backstreetlinkv2/api/helper"
+	"backstreetlinkv2/api/model"
 	"context"
 	"database/sql"
 	"errors"

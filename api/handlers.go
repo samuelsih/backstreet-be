@@ -1,9 +1,9 @@
-package main
+package api
 
 import (
-	"backstreetlinkv2/cmd/helper"
-	"backstreetlinkv2/cmd/model"
-	"backstreetlinkv2/cmd/service"
+	"backstreetlinkv2/api/helper"
+	"backstreetlinkv2/api/model"
+	"backstreetlinkv2/api/service"
 	"encoding/json"
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog/log"
@@ -19,7 +19,7 @@ const (
 	fileMaxSize       = 10 << 20
 )
 
-func createLink(svc *service.Deps) http.HandlerFunc {
+func CreateLink(svc *service.Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -40,7 +40,7 @@ func createLink(svc *service.Deps) http.HandlerFunc {
 	}
 }
 
-func createFile(svc *service.Deps) http.HandlerFunc {
+func CreateFile(svc *service.Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -82,7 +82,7 @@ func createFile(svc *service.Deps) http.HandlerFunc {
 
 }
 
-func find(svc *service.Deps) http.HandlerFunc {
+func Find(svc *service.Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -101,7 +101,7 @@ func find(svc *service.Deps) http.HandlerFunc {
 	}
 }
 
-func downloadFile(svc *service.Deps) http.HandlerFunc {
+func DownloadFile(svc *service.Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		param := mux.Vars(r)
 		if _, ok := param["alias"]; !ok {

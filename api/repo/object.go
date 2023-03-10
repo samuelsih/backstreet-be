@@ -1,7 +1,7 @@
 package repo
 
 import (
-	"backstreetlinkv2/cmd/helper"
+	"backstreetlinkv2/api/helper"
 	"context"
 	"errors"
 	"github.com/aws/aws-sdk-go-v2/aws"

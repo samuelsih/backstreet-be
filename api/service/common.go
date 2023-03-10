@@ -1,7 +1,7 @@
 package service
 
 import (
-	"backstreetlinkv2/cmd/helper"
+	"backstreetlinkv2/api/helper"
 	"github.com/rs/zerolog/log"
 	"strings"
 )

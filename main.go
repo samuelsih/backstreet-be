@@ -1,9 +1,10 @@
 package main
 
 import (
-	"backstreetlinkv2/cmd/middleware"
-	"backstreetlinkv2/cmd/repo"
-	"backstreetlinkv2/cmd/service"
+	"backstreetlinkv2/api"
+	"backstreetlinkv2/api/middleware"
+	"backstreetlinkv2/api/repo"
+	"backstreetlinkv2/api/service"
 	"backstreetlinkv2/db"
 	"backstreetlinkv2/db/migrations"
 	"context"
@@ -58,7 +59,7 @@ func main() {
 		}
 	}
 
-	port := os.Getenv("port")
+	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
@@ -94,11 +95,16 @@ func main() {
 
 	programService := service.NewLinkDeps(pgRepo, s3Service, cache)
 
+	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte("OK"))
+	}).Methods(http.MethodGet)
+
 	r := router.PathPrefix("/api/v2").Subrouter()
-	r.HandleFunc("/link", createLink(programService)).Methods(http.MethodPost)
-	r.HandleFunc("/file", createFile(programService)).Methods(http.MethodPost)
-	r.HandleFunc("/download-file/{alias}", downloadFile(programService)).Methods(http.MethodGet)
-	r.HandleFunc("/find/{alias}", find(programService)).Methods(http.MethodGet)
+	r.HandleFunc("/link", api.CreateLink(programService)).Methods(http.MethodPost)
+	r.HandleFunc("/file", api.CreateFile(programService)).Methods(http.MethodPost)
+	r.HandleFunc("/download-file/{alias}", api.DownloadFile(programService)).Methods(http.MethodGet)
+	r.HandleFunc("/find/{alias}", api.Find(programService)).Methods(http.MethodGet)
 
 	server := &http.Server{
 		Addr:              ":" + port,
@@ -111,7 +117,7 @@ func main() {
 	}
 
 	go func() {
-		log.Println("listen and serve on port", port)
+		log.Println("currently listen and serve on port", port)
 
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("cant start server: %v", err)

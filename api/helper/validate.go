@@ -1,7 +1,7 @@
 package helper
 
 import (
-	"backstreetlinkv2/cmd/model"
+	"backstreetlinkv2/api/model"
 	"github.com/go-playground/validator/v10"
 )
 

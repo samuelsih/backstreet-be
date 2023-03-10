@@ -1,7 +1,7 @@
 package repo
 
 import (
-	"backstreetlinkv2/cmd/model"
+	"backstreetlinkv2/api/model"
 	"context"
 	"testing"
 )
