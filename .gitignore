@@ -2,3 +2,4 @@
 *.exe
 Procfile
 fly.toml
+.idea
