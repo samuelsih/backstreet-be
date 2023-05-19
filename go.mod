@@ -4,13 +4,14 @@ module backstreetlinkv2
 go 1.18
 
 require (
+	github.com/allegro/bigcache/v3 v3.1.0
 	github.com/aws/aws-sdk-go-v2 v1.17.4
 	github.com/aws/aws-sdk-go-v2/config v1.18.13
-	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.11.53
+	github.com/aws/aws-sdk-go-v2/credentials v1.13.13
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.30.3
 	github.com/go-playground/validator/v10 v10.11.0
+	github.com/go-sql-driver/mysql v1.7.1
 	github.com/gorilla/mux v1.8.0
-	github.com/jackc/pgx/v5 v5.3.0
 	github.com/joho/godotenv v1.5.1
 	github.com/rs/cors v1.8.2
 	github.com/rs/zerolog v1.29.0
@@ -21,9 +22,7 @@ require (
 require (
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
 	github.com/Microsoft/go-winio v0.5.2 // indirect
-	github.com/allegro/bigcache/v3 v3.1.0 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.4.10 // indirect
-	github.com/aws/aws-sdk-go-v2/credentials v1.13.13 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.12.22 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.1.28 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.4.22 // indirect
@@ -48,9 +47,6 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/uuid v1.3.0 // indirect
-	github.com/jackc/pgpassfile v1.0.0 // indirect
-	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
-	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/klauspost/compress v1.11.13 // indirect
 	github.com/leodido/go-urn v1.2.1 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect

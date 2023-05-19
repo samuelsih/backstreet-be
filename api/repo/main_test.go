@@ -4,17 +4,18 @@ import (
 	"backstreetlinkv2/db"
 	"backstreetlinkv2/db/migrations"
 	"context"
+	"database/sql"
 	"fmt"
-	"github.com/jackc/pgx/v5"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
 	"log"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-var testDB *pgx.Conn
+var testDB *sql.DB
 var testCache *Cache
 
 func TestMain(m *testing.M) {
@@ -43,13 +44,13 @@ func setupDB() (func() error, error) {
 	ctx := context.Background()
 
 	req := testcontainers.ContainerRequest{
-		Image:        "postgres:latest",
+		Image:        "mysql:latest",
 		ExposedPorts: []string{"5432/tcp"},
 		WaitingFor:   wait.ForListeningPort("5432/tcp"),
 		Env: map[string]string{
-			"POSTGRES_DB":       "backstreet",
-			"POSTGRES_PASSWORD": "postgres",
-			"POSTGRES_USER":     "postgres",
+			"MYSQL_DB":       "backstreet",
+			"MYSQL_PASSWORD": "password",
+			"MYSQL_USER":     "mysql",
 		},
 	}
 
@@ -75,14 +76,14 @@ func setupDB() (func() error, error) {
 		return nil, err
 	}
 
-	uri := fmt.Sprintf("postgres://postgres:postgres@%v:%v/backstreet?sslmode=disable", hostIP, mappedPort.Port())
+	uri := fmt.Sprintf("mysql:password@%v:%v/backstreet?tls=skip-verify", hostIP, mappedPort.Port())
 
-	testDB, err = db.ConnectPG(uri)
+	testDB, err = db.ConnectMySQL(uri)
 	if testDB == nil {
 		return nil, err
 	}
 
-	_, err = testDB.Exec(ctx, migrations.UpCmd)
+	_, err = testDB.ExecContext(ctx, migrations.UpCmd)
 	if err != nil {
 		log.Fatalf("cant create table: %v", err)
 	}

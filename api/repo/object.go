@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	NoObjectID = errors.New("object id is not found/empty")
+	ErrNoObjectID = errors.New("object id is not found/empty")
 )
 
 type ObjectScanner struct {
@@ -68,7 +68,7 @@ func (o *ObjectScanner) Upload(ctx context.Context, filename string, fileToUploa
 	}
 
 	if output.ETag == nil {
-		return helper.E(op, helper.KindUnexpected, NoObjectID, CantProcessRequest)
+		return helper.E(op, helper.KindUnexpected, ErrNoObjectID, CantProcessRequest)
 	}
 
 	return nil

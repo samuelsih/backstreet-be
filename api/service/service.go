@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	WrongTypeErr = errors.New("invalid request")
+	ErrWrongType = errors.New("invalid request")
 )
 
 const (
@@ -63,7 +63,7 @@ func (d *Deps) InsertLink(ctx context.Context, data model.ShortenRequest) Insert
 	var out InsertLinkOutput
 
 	if data.Type != model.TypeLink {
-		out.SetErr(helper.E(op, helper.KindBadRequest, WrongTypeErr, WrongTypeErr.Error()))
+		out.SetErr(helper.E(op, helper.KindBadRequest, ErrWrongType, ErrWrongType.Error()))
 		return out
 	}
 
@@ -105,7 +105,7 @@ func (d *Deps) InsertFile(ctx context.Context, data model.ShortenFileRequest) In
 	var out InsertFileOutput
 
 	if data.Type != model.TypeFile {
-		out.SetErr(helper.E(op, helper.KindBadRequest, WrongTypeErr, WrongTypeErr.Error()))
+		out.SetErr(helper.E(op, helper.KindBadRequest, ErrWrongType, ErrWrongType.Error()))
 		return out
 	}
 
@@ -153,12 +153,12 @@ func (d *Deps) Find(ctx context.Context, key string) FindOutput {
 	var out FindOutput
 
 	resultFromMemory, err := d.cache.Get(key)
-	if (err != nil) && !errors.Is(err, repo.CacheNotFound) {
+	if (err != nil) && !errors.Is(err, repo.ErrCacheNotFound) {
 		out.SetErr(helper.E(op, helper.GetKind(err), err, err.Error()))
 		return out
 	}
 
-	if errors.Is(err, repo.CacheNotFound) {
+	if errors.Is(err, repo.ErrCacheNotFound) {
 		result, err := d.storage.Get(ctx, key)
 		if err != nil {
 			out.SetErr(helper.E(op, helper.GetKind(err), err, err.Error()))
@@ -199,7 +199,7 @@ func (d *Deps) DownloadFile(ctx context.Context, key string) DownloadFileOutput 
 	}
 
 	if record.Type != model.TypeFile {
-		out.SetErr(helper.E(op, helper.KindBadRequest, WrongTypeErr, WrongTypeErr.Error()))
+		out.SetErr(helper.E(op, helper.KindBadRequest, ErrWrongType, ErrWrongType.Error()))
 		return out
 	}
 

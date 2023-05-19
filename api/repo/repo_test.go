@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-func TestPGRepo_Insert(t *testing.T) {
-	p := PGRepo{testDB}
+func TestMYSQLRepo_Insert(t *testing.T) {
+	p := MYSQLRepo{testDB}
 	ctx := context.Background()
 
 	type args struct {

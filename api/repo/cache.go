@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	CacheNotFound = errors.New("not found")
+	ErrCacheNotFound = errors.New("not found")
 )
 
 type Cache struct {
@@ -53,10 +53,10 @@ func (c *Cache) Get(key string) ([]byte, error) {
 	value, err := c.provider.Get(key)
 	if err != nil {
 		if errors.Is(err, bigcache.ErrEntryNotFound) {
-			return nil, CacheNotFound
+			return nil, ErrCacheNotFound
 		}
 
-		return nil, helper.E(helper.Op("Cache.Set"), helper.KindUnexpected, err, "can't get the value")
+		return nil, helper.E(op, helper.KindUnexpected, err, "can't get the value")
 	}
 
 	return value, nil

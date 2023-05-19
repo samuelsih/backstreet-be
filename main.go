@@ -35,12 +35,12 @@ func main() {
 		environment = "LOCAL"
 	}
 
-	dsn := os.Getenv("DB_DSN")
+	dsn := os.Getenv("MYSQL_DSN")
 	if dsn == "" {
-		dsn = "postgres://postgres:postgres@localhost:5432/backstreet"
+		dsn = "mysql:password@tcp(localhost:3306)/backstreet?tls=skip-verify"	
 	}
 
-	dbClient, err := db.ConnectPG(dsn)
+	dbClient, err := db.ConnectMySQL(dsn)
 	if err != nil {
 		log.Fatalf("can't connect to db: %v", err)
 	}
@@ -48,12 +48,12 @@ func main() {
 	if *wantFreshDB {
 		ctx := context.Background()
 
-		_, err := dbClient.Exec(ctx, migrations.DownCmd)
+		_, err := dbClient.ExecContext(ctx, migrations.DownCmd)
 		if err != nil {
 			log.Fatalf("cant drop table: %v", err)
 		}
 
-		_, err = dbClient.Exec(ctx, migrations.UpCmd)
+		_, err = dbClient.ExecContext(ctx, migrations.UpCmd)
 		if err != nil {
 			log.Fatalf("cant create table: %v", err)
 		}
@@ -76,7 +76,7 @@ func main() {
 		middleware.Limit,
 	)
 
-	pgRepo := repo.NewPGRepo(dbClient)
+	pgRepo := repo.NewMYSQLRepo(dbClient)
 	cache, err := repo.NewCache(context.Background(), maxCacheCountdown)
 	if err != nil {
 		log.Fatalf("error cache: %v", err)
@@ -124,7 +124,7 @@ func main() {
 		}
 	}()
 
-	quit := make(chan os.Signal)
+	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT, os.Interrupt)
 
 	<-quit
@@ -133,7 +133,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
-	if err := dbClient.Close(ctx); err != nil {
+	if err := dbClient.Close(); err != nil {
 		log.Printf("shutting down db error: %v", err)
 	}
 
